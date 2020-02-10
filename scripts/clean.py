@@ -13,7 +13,7 @@ from urllib.parse import urljoin
 
 os.chdir(urljoin(__file__, '../'))
 
-module_name = __file__._split('/')[-3].replace('-', '_')
+module_name = __file__.split('/')[-3].replace('-', '_')
 
 for file_or_directory in (
     'dist', 'build', '%s.egg-info' % module_name,
