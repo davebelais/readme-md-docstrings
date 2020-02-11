@@ -63,9 +63,7 @@ class ReadMe:
         """
         docstring: str = ''
         if self.name_space is not None:
-            docstring: str = pydoc.getdoc(self.name_space).strip(
-                '\n\r\t '
-            ) or ''
+            docstring: str = pydoc.getdoc(self.name_space).strip() or ''
             if docstring:
                 docstring = f'\n{docstring}\n'
         return docstring
@@ -145,12 +143,13 @@ class ReadMe:
             str(section)
             for section in self
         )
-        if not body:
+        text: str = self.text
+        if not (body or text):
             body = self.markdown
         return (
             f'{self.before}'
             f'{self.header}'
-            f'{self.text}'
+            f'{text}'
             f'{body}'
         )
 
