@@ -1,6 +1,6 @@
 # readme-md-docstrings
 
-This script updates module, class, and functions docs in a `README.md` file,
+This script updates module, class, and function docs in a README.md file,
 based on their corresponding docstrings (so that documentation does not need to
 be manually written in two places).
 
