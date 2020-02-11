@@ -1,18 +1,11 @@
-"""
-This script updates module, class, and function docs in a `README.md` file,
-based on their corresponding docstrings (so that documentation does not need to
-be manually written in two places).
-
->>> import readme_md_docstrings
-... readme_md_docstrings.update('./README.md')
-"""
 import argparse
 import functools
 import importlib
+import os
 import re
 import urllib.parse
 import pydoc
-from typing import Optional, Iterable, List, Pattern
+from typing import Optional, Iterable, List, Pattern, Tuple
 
 README_PATH: str = urllib.parse.urljoin(__file__, '../README.md')
 
@@ -68,14 +61,24 @@ class ReadMe:
         """
         This is the text preceding any sub-sections
         """
+        docstring: str = ''
         if self.name_space is not None:
-            docstring: str = pydoc.getdoc(self.name_space).strip()
+            docstring: str = pydoc.getdoc(self.name_space).strip(
+                '\n\r\t '
+            ) or ''
             if docstring:
-                return f'\n{docstring}\n'
-            else:
-                return ''
-        else:
-            return '\n'
+                docstring = f'\n{docstring}\n'
+        return docstring
+
+    def _get_package_and_name(self,  name: str) -> Tuple[str, str]:
+        package_split: List = []
+        if isinstance(self.name_space, Module):
+            package_split += list(self.name_space.__name__.split('.'))
+        if '.' in name:
+            name_split: List[str] = list(name.split('.'))
+            package_split += name_split[:-1]
+            name = name_split[-1]
+        return '.'.join(package_split), name
 
     def _get_name_space(self, name: str) -> Optional[object]:
         """
@@ -83,17 +86,20 @@ class ReadMe:
         name-space, or return `None` if the attribute is not found
         """
         name_space: Optional[object] = None
-        try:
-            name_space = importlib.import_module(
-                name,
-                package=self.name_space
-            )
-        except ImportError:
-            if self.name_space is not None:
-                try:
-                    name_space = getattr(self.name_space, name)
-                except AttributeError:
-                    pass
+        if self.name_space is not None:
+            try:
+                name_space = getattr(self.name_space, name)
+            except AttributeError:
+                pass
+        else:
+            package, name = self._get_package_and_name(name)
+            try:
+                name_space = importlib.import_module(
+                    name,
+                    package=package
+                )
+            except ImportError:
+                pass
         return name_space
 
     def __iter__(self) -> Iterable['ReadMe']:
@@ -119,8 +125,16 @@ class ReadMe:
             body
         ) in self._split():
             section: 'ReadMe' = ReadMe(markdown=body)
-            section.before = before if include_before else ''
-            section.header = start_header + before_name + name + after_name
+            section.before = before if include_before else '\n'
+            section.header = (
+                start_header +
+                before_name + name +
+                after_name + (
+                    ''
+                    if after_name.endswith('\n') else
+                    '\n'
+                )
+            )
             # Assign a name-space object to the section
             section.name_space = self._get_name_space(name)
             yield section
@@ -141,21 +155,40 @@ class ReadMe:
         Render the document as markdown, updated to reflect any docstrings
         that were found
         """
-        return ''.join((
-            self.before,
-            self.header,
-            self.text,
-            *(
-                str(section)
-                for section in self
-            )
-        ))
+        body: str = ''.join(
+            str(section)
+            for section in self
+        )
+        if not body:
+            body = self.markdown
+        return (
+            f'{self.before}'
+            f'{self.header}'
+            f'{self.text}'
+            f'{body}'
+        )
 
 
 def update(path: str = './README.md') -> None:
     """
     Update an existing README.md file located at `path`.
+
+    ```python
+    import readme_md_docstrings
+    readme_md_docstrings.update('./README.md')
+    ```
+
+    This can also be run from the command line:
+    ```shell script
+    python3 -m readme_md_docstrings ./README.md
+    ```
+
+    If no path is provided, the default is "./README.md":
+    ```shell script
+    python3 -m readme_md_docstrings
+    ```
     """
+    print(os.path.abspath(path))
     # Read the existing markdown
     with open(path, 'r') as readme_io:
         read_me: ReadMe = ReadMe(
