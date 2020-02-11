@@ -24,5 +24,10 @@ setup(
             "pytest>=5.3.5",
             "tox>=3.14.3"
         ]
-    }
+    },
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent"
+    ],
 )
