@@ -1,6 +1,6 @@
 # readme-md-docstrings
 
-This script updates module, class, and functions docs in a `README.md` file,
+This script updates module, class, and functions docs in a README.md file,
 based on their corresponding docstrings (so that documentation does not need to
 be manually written in two places).
 
@@ -12,9 +12,9 @@ pip3 install readme-md-docstrings
 
 ## Modules
 
-### `readme_md_docstrings`
+### readme_md_docstrings
 
-#### `ReadMe`
+#### ReadMe
 
 This class parses a markdown-formatted README file and updates sections
 to reflect a corresponding package's class, method, and function
@@ -22,9 +22,9 @@ docstrings.
 
 Parameters:
 
-    - markdown (str): Markdown text
+- markdown (str): Markdown text
 
-#### `update`
+#### update
 
 Update an existing README.md file located at `path`.
 

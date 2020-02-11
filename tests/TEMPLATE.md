@@ -12,11 +12,11 @@ pip3 install readme-md-docstrings
 
 ## Modules
 
-### `readme_md_docstrings`
+### readme_md_docstrings
 
-#### `ReadMe`
+#### ReadMe
 
-#### `update`
+#### update
 
 ## Distribute
 
