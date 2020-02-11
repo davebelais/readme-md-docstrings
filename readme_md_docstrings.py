@@ -70,16 +70,6 @@ class ReadMe:
                 docstring = f'\n{docstring}\n'
         return docstring
 
-    def _get_package_and_name(self,  name: str) -> Tuple[str, str]:
-        package_split: List = []
-        if isinstance(self.name_space, Module):
-            package_split += list(self.name_space.__name__.split('.'))
-        if '.' in name:
-            name_split: List[str] = list(name.split('.'))
-            package_split += name_split[:-1]
-            name = name_split[-1]
-        return '.'.join(package_split), name
-
     def _get_name_space(self, name: str) -> Optional[object]:
         """
         Get a name-space from an attribute name, relative to the current
@@ -92,12 +82,8 @@ class ReadMe:
             except AttributeError:
                 pass
         else:
-            package, name = self._get_package_and_name(name)
             try:
-                name_space = importlib.import_module(
-                    name,
-                    package=package
-                )
+                name_space = importlib.import_module(name)
             except ImportError:
                 pass
         return name_space
@@ -188,7 +174,6 @@ def update(path: str = './README.md') -> None:
     python3 -m readme_md_docstrings
     ```
     """
-    print(os.path.abspath(path))
     # Read the existing markdown
     with open(path, 'r') as readme_io:
         read_me: ReadMe = ReadMe(
