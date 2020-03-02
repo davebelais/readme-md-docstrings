@@ -48,8 +48,8 @@ def _validate_test() -> None:
         # If the validation file was not pre-existing, the user should manually
         # validate the newly created file to ensure it matches expectations
         warn(
-            '*./data/VALIDATE.md* was not pre-existing, please manually verify '
-            'the newly generated contents of this file'
+            '*./data/VALIDATE.md* was not pre-existing, please manually verify'
+            ' the newly generated contents of this file'
         )
 
 

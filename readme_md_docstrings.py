@@ -1,7 +1,7 @@
+from __future__ import absolute_import
 import argparse
 import functools
 import importlib
-import os
 import re
 import urllib.parse
 import pydoc
@@ -76,9 +76,19 @@ class ReadMe:
         name_space: Optional[object] = None
         if self.name_space is not None:
             try:
+                # Attempt to retrieve an attribute
                 name_space = getattr(self.name_space, name)
             except AttributeError:
-                pass
+                # Attempt to retrieve a sub-module
+                if isinstance(self.name_space, Module):
+                    module_name: str = getattr(self.name_space, '__name__', '')
+                    if module_name:
+                        try:
+                            name_space = importlib.import_module(
+                                f'{module_name}.{name}'
+                            )
+                        except ImportError:
+                            pass
         else:
             try:
                 name_space = importlib.import_module(name)
