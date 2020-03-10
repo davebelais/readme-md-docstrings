@@ -2,13 +2,13 @@ from setuptools import setup
 
 setup(
     name='readme-md-docstrings',
-    version="0.0.7",
+    version="0.0.8",
     description=(
         'Update README.md from Docstrings'
     ),
     author='David Belais',
     author_email='david@belais.me',
-    python_requires='>=3.7',
+    python_requires='>=3.6',
     py_modules=['readme_md_docstrings'],
     install_requires=[],
     extras_require={

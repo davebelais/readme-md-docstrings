@@ -40,8 +40,8 @@ def _validate_test() -> None:
     """
     valid_text: str = _get_valid()
     if valid_text:
-        # If the validation file was pre-existing, compare it with the output we
-        # just wrote
+        # If the validation file was pre-existing, compare it with the output
+        # we just wrote
         with open(TEST_PATH, 'r') as test_io:
             assert test_io.read() == valid_text
     else:
@@ -118,4 +118,3 @@ def test_command_line_update() -> None:
 if __name__ == '__main__':
     test_update()
     test_command_line_update()
-

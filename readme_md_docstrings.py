@@ -1,16 +1,13 @@
 from __future__ import absolute_import
 import argparse
-import functools
 import importlib
 import re
 import urllib.parse
 import pydoc
-from typing import Optional, Iterable, List, Pattern, Tuple
+from typing import Optional, Iterable, List, Pattern
 
 README_PATH: str = urllib.parse.urljoin(__file__, '../README.md')
 
-
-Module: type = type(urllib.parse)
 
 MARKDOWN_SECTIONS_RE: str = (
     # Group 1: Text preceding a header
@@ -18,11 +15,11 @@ MARKDOWN_SECTIONS_RE: str = (
     # Group 2: Markup indicating the start of a header
     r'(#+)'
     # Group 3: Spaces, punctuation, etc. preceding the name-space key
-    r'([^\w]*'  
+    r'([^\w]*'
     # Group 3: ...include any tags wrapping the name-space in group 3
-    r'(?:<[^\>]+>[^\w]*)?)'  
+    r'(?:<[^\>]+>[^\w]*)?)'
     # Group 4: The name-space key (module/class/function name)
-    r'([A-Za-z][A-Za-z_\.]*)'  
+    r'([A-Za-z][A-Za-z_\.]*)'
     # Group 5: The remainder of the header line
     r'([^\n]*(?:\n|$))'
     # Group 6: Text up to (but not including) the next header of the same level
@@ -33,6 +30,45 @@ MARKDOWN_SECTIONS_PATTERN: Pattern = re.compile(
     MARKDOWN_SECTIONS_RE,
     re.DOTALL
 )
+
+
+def get_name_space(path: str) -> Optional[object]:
+    """
+    Get a name-space from a fully-qualified path
+    """
+    name_space: Optional[object] = None
+    parts: List[str] = path.split('.')
+    index: int
+    attribute_name: str
+    # Iterate over indices in reverse: 0, -1, -2, -3, ...
+    for index in range(0, -len(parts), -1):
+        # When the index is `0`--we use the whole path, otherwise
+        # we split at `index`
+        module_path: str = (
+            '.'.join(parts[:index])
+            if index else
+            path
+        )
+        # Check to see if `module_path` is valid, and if it is not--continue
+        # to shift the split index until we find a module path which *is*
+        # valid, or come to the beginning of the path
+        try:
+            name_space = importlib.import_module(
+                module_path
+            )
+            # If the module path is a valid namespace, but the `path`
+            # was pointing to an attribute of the module and not the module
+            # itself--resolve that attribute path
+            if index < 0:
+                for attribute_name in parts[index:]:
+                    try:
+                        name_space = getattr(name_space, attribute_name)
+                    except AttributeError:
+                        name_space = None
+            break
+        except ModuleNotFoundError:
+            pass
+    return name_space
 
 
 class ReadMe:
@@ -51,7 +87,7 @@ class ReadMe:
         markdown: str
     ) -> None:
         self.markdown = markdown
-        self.name_space: Optional[object] = None
+        self.name_space_path: str = ''
         self.before: str = ''
         self.header: str = ''
         self.name: str = ''
@@ -62,39 +98,49 @@ class ReadMe:
         This is the text preceding any sub-sections
         """
         docstring: str = ''
-        if self.name_space is not None:
-            docstring: str = pydoc.getdoc(self.name_space).strip() or ''
-            if docstring:
-                docstring = f'\n{docstring}\n'
+        if self.name_space_path:
+            name_space: Optional[object] = get_name_space(
+                self.name_space_path
+            )
+            if name_space:
+                docstring: str = pydoc.getdoc(name_space).strip() or ''
+                if docstring:
+                    docstring = f'\n{docstring}\n'
         return docstring
 
-    def _get_name_space(self, name: str) -> Optional[object]:
-        """
-        Get a name-space from an attribute name, relative to the current
-        name-space, or return `None` if the attribute is not found
-        """
-        name_space: Optional[object] = None
-        if self.name_space is not None:
-            try:
-                # Attempt to retrieve an attribute
-                name_space = getattr(self.name_space, name)
-            except AttributeError:
-                # Attempt to retrieve a sub-module
-                if isinstance(self.name_space, Module):
-                    module_name: str = getattr(self.name_space, '__name__', '')
-                    if module_name:
-                        try:
-                            name_space = importlib.import_module(
-                                f'{module_name}.{name}'
-                            )
-                        except ImportError:
-                            pass
+    @classmethod
+    def _new_section(
+        cls,
+        markdown: str,
+        before: str,
+        start_header: str,
+        before_name: str,
+        name: str,
+        after_name: str,
+        parent_name_space_path: str
+    ) -> 'ReadMe':
+        section: cls = cls(markdown=markdown)
+        section.before = before
+        section.header = (
+            start_header +
+            before_name + name +
+            after_name + (
+                ''
+                if after_name.endswith('\n') else
+                '\n'
+            )
+        )
+        # Assign a name-space path to the section
+        if parent_name_space_path and get_name_space(parent_name_space_path):
+            concatenated_name_space_path: str = (
+                f'{parent_name_space_path}.{name}'
+                if name else
+                parent_name_space_path
+            )
+            section.name_space_path = concatenated_name_space_path
         else:
-            try:
-                name_space = importlib.import_module(name)
-            except ImportError:
-                pass
-        return name_space
+            section.name_space_path = name
+        return section
 
     def __iter__(self) -> Iterable['ReadMe']:
         """
@@ -118,24 +164,18 @@ class ReadMe:
             after_name,
             body
         ) in self._split():
-            section: 'ReadMe' = ReadMe(markdown=body)
-            section.before = before if include_before else '\n'
-            section.header = (
-                start_header +
-                before_name + name +
-                after_name + (
-                    ''
-                    if after_name.endswith('\n') else
-                    '\n'
-                )
+            yield self._new_section(
+                markdown=body,
+                before=before if include_before else '\n',
+                start_header=start_header,
+                before_name=before_name,
+                name=name,
+                after_name=after_name,
+                parent_name_space_path=self.name_space_path
             )
-            # Assign a name-space object to the section
-            section.name_space = self._get_name_space(name)
-            yield section
             # Only exclude before for the first section
             include_before = True
 
-    @functools.lru_cache()
     def _split(self) -> List[str]:
         """
         Split the markdown into sections
