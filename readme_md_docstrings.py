@@ -225,12 +225,12 @@ def update(path: str = './README.md') -> None:
     """
     # Read the existing markdown
     with open(path, 'r') as readme_io:
-        read_me: ReadMe = ReadMe(
-            readme_io.read()
-        )
+        read_me: ReadMe = ReadMe(readme_io.read())
+    read_me_str: str = str(read_me)
     # Update and save
-    with open(path, 'w') as readme_io:
-        readme_io.write(str(read_me))
+    if read_me_str:
+        with open(path, 'w') as readme_io:
+            readme_io.write(read_me_str)
 
 
 if __name__ == '__main__':
