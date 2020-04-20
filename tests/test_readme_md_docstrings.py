@@ -38,12 +38,14 @@ def _validate_test() -> None:
     """
     Verify that the content of ./data/TEST.md matches our expected output
     """
+    test_text: str
+    with open(TEST_PATH, 'r') as test_io:
+        test_text = test_io.read()
     valid_text: str = _get_valid()
     if valid_text:
         # If the validation file was pre-existing, compare it with the output
         # we just wrote
-        with open(TEST_PATH, 'r') as test_io:
-            assert test_io.read() == valid_text
+        assert test_text == valid_text
     else:
         # If the validation file was not pre-existing, the user should manually
         # validate the newly created file to ensure it matches expectations
@@ -101,6 +103,8 @@ def test_update(
         _command_line_update(TEST_PATH)
     else:
         update(TEST_PATH)
+    # Verify that the test file and valid file match
+    _validate_test()
     # Perform one recursive call, to ensure that nothing odd occurs when
     # *existing* text is found for a heading or sub-heading
     if not _iteration:

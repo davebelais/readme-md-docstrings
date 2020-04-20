@@ -1,42 +1,26 @@
-from __future__ import absolute_import
+"""
+This module may be called as a command-line executable. For example:
+```shell script
+python3 -m readme_md_docstrings ./README.md
+```
+
+If no path is provided, the default is "./README.md":
+```shell script
+python3 -m readme_md_docstrings
+```
+"""
 import argparse
+import collections
 import importlib
-import re
-import urllib.parse
 import pydoc
-from typing import Optional, Iterable, List, Pattern
-
-README_PATH: str = urllib.parse.urljoin(__file__, '../README.md')
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 
-MARKDOWN_SECTIONS_RE: str = (
-    # Group 1: Text preceding a header
-    r'(.*?(?:\n|^))'
-    # Group 2: Markup indicating the start of a header
-    r'(#+)'
-    # Group 3: Spaces, punctuation, etc. preceding the name-space key
-    r'([^\w]*'
-    # Group 3: ...include any tags wrapping the name-space in group 3
-    r'(?:<[^\>]+>[^\w]*)?)'
-    # Group 4: The name-space key (module/class/function name)
-    r'([A-Za-z][A-Za-z_\.]*)'
-    # Group 5: The remainder of the header line
-    r'([^\n]*(?:\n|$))'
-    # Group 6: Text up to (but not including) the next header of the same level
-    r'(.*?(?=(?:\n\2[^#]|$)))'
-
-)
-MARKDOWN_SECTIONS_PATTERN: Pattern = re.compile(
-    MARKDOWN_SECTIONS_RE,
-    re.DOTALL
-)
-
-
-def get_name_space(path: str) -> Optional[object]:
+def _get_object_from_path(path: str) -> Optional[object]:
     """
-    Get a name-space from a fully-qualified path
+    Get a function, class, or module from a fully-qualified path + name.
     """
-    name_space: Optional[object] = None
+    object_: Optional[object] = None
     parts: List[str] = path.split('.')
     index: int
     attribute_name: str
@@ -53,7 +37,7 @@ def get_name_space(path: str) -> Optional[object]:
         # to shift the split index until we find a module path which *is*
         # valid, or come to the beginning of the path
         try:
-            name_space = importlib.import_module(
+            object_ = importlib.import_module(
                 module_path
             )
             # If the module path is a valid namespace, but the `path`
@@ -62,24 +46,186 @@ def get_name_space(path: str) -> Optional[object]:
             if index < 0:
                 for attribute_name in parts[index:]:
                     try:
-                        name_space = getattr(name_space, attribute_name)
+                        object_ = getattr(object_, attribute_name)
                     except AttributeError:
-                        name_space = None
+                        object_ = None
             break
         except ModuleNotFoundError:
             pass
-    return name_space
+    return object_
+
+
+def _get_header_level(header: str) -> int:
+    header_level: int = 0
+    character: str
+    for character in header:
+        if character == '#':
+            header_level += 1
+        else:
+            break
+    return header_level
+
+
+def _get_header_name(header: str) -> str:
+    return header.lstrip('#').strip()
+
+
+def _get_sub_section_ranges(
+    lines: Sequence[str],
+    header_level: int
+) -> List[Tuple[int, int]]:
+    assert lines
+    in_code_block: bool = False
+    sub_section_ranges: List[Tuple[int, int]] = []
+    line: str
+    start: int = 0
+    index: int = 0
+    for index, line in enumerate(lines, 0):
+        # Identify whether we are inside a code block
+        if (
+            # We were not *already* within a code block
+            (not in_code_block) and
+            # This line opens a code block
+            line.lstrip().startswith('```') and
+            # This line does not also close that code block
+            len(line.split('```')) == 2
+        ):
+            # We started a new code block
+            in_code_block = True
+        elif in_code_block and len(line.split('```')) == 2:
+            # We've ended a code block
+            in_code_block = False
+        # Only examine lines which are *not* within code blocks,
+        # and which are *not* part of the top-level header
+        if (not in_code_block) and index:
+            line_header_level: int = _get_header_level(line)
+            if line_header_level == header_level:
+                sub_section_ranges.append((start, index))
+                start = index
+            else:
+                # We shouldn't have any lower-level headers...
+                assert (
+                    line_header_level == 0 or
+                    line_header_level > header_level
+                )
+    # if start != index:
+    sub_section_ranges.append((start, index + 1))
+    return sub_section_ranges
+
+
+class Section:
+
+    def __init__(
+        self,
+        lines: Iterable[str],
+        parent_object_path: str = ''
+    ) -> None:
+        self.documented_object: Optional[object] = None
+        self.name_space_path: str = parent_object_path
+        self.name: str = ''
+        self.header_level: int = 0
+        self.lines: List[str] = []
+        self.sub_sections: List[Section] = []
+        self._init_lines(lines)
+
+    def _init_header(self, header: str) -> None:
+        self.header_level = _get_header_level(header)
+        self.name = _get_header_name(header)
+        name_space_path: Optional[str]
+        for name_space_path in (
+            [f'{self.name_space_path}.{self.name}']
+            if self.name_space_path else []
+        ) + [
+            self.name,
+            None
+        ]:
+            if name_space_path is not None:
+                self.documented_object = _get_object_from_path(name_space_path)
+            self.name_space_path = name_space_path
+            if self.documented_object is not None:
+                break
+
+    def _init_lines(self, lines: Iterable[str]) -> None:
+        # If `lines` is not a sequence, make it one
+        if not isinstance(lines, collections.abc.Sequence):
+            lines = tuple(lines)
+        # Ensure there is at least one line
+        assert lines
+        self._init_header(lines[0])
+        start: int
+        end: int
+        for start, end in _get_sub_section_ranges(
+            lines,
+            self.header_level + 1
+        ):
+            if start:
+                # This is a new sub-section
+                self.sub_sections.append(
+                    Section(
+                        lines[start: end],
+                        parent_object_path=self.name_space_path
+                    )
+                )
+            else:
+                # This is the top-level content
+                self.lines.extend(lines[start: end])
+
+    def _get_docstring(self) -> str:
+        docstring: str = ''
+        if self.documented_object is not None:
+            docstring: str = pydoc.getdoc(self.documented_object).rstrip()
+        return docstring
+
+    def __str__(self) -> str:
+        assert self.lines
+        docstring: str = self._get_docstring()
+        sub_sections_text: str = ''
+        if self.sub_sections:
+            sub_sections_text = '\n'.join(
+                str(section)
+                for section in self.sub_sections
+            )
+        if docstring:
+            return (
+                f'{self.lines[0].strip()}\n\n'
+                f'{docstring}\n'
+            ) + (
+                ('\n' + sub_sections_text)
+                if sub_sections_text else
+                sub_sections_text
+            )
+        else:
+            return '\n'.join(
+                self.lines + (
+                    [sub_sections_text]
+                    if sub_sections_text else
+                    []
+                )
+            )
 
 
 class ReadMe:
-    """
+    r"""
     This class parses a markdown-formatted README file and updates sections
     to reflect a corresponding package's class, method, and function
     docstrings.
 
     Parameters:
 
-        - markdown (str): Markdown text
+    - markdown (str): Markdown-formatted text
+
+    ```python
+    from readme_md_docstrings import ReadMe
+    # Read the existing markdown
+    path: str = './README.md'
+    with open(path, 'r') as readme_io:
+        read_me: ReadMe = ReadMe(readme_io.read())
+    read_me_str: str = str(read_me).rstrip()
+    # Update and save
+    if read_me_str:
+        with open(path, 'w') as readme_io:
+            readme_io.write(read_me_str)
+    ```
     """
 
     def __init__(
@@ -87,140 +233,23 @@ class ReadMe:
         markdown: str
     ) -> None:
         self.markdown = markdown
-        self.name_space_path: str = ''
-        self.before: str = ''
-        self.header: str = ''
-        self.name: str = ''
-
-    @property
-    def text(self) -> str:
-        """
-        This is the text preceding any sub-sections
-        """
-        docstring: str = ''
-        if self.name_space_path:
-            name_space: Optional[object] = get_name_space(
-                self.name_space_path
-            )
-            if name_space:
-                docstring: str = pydoc.getdoc(name_space).strip() or ''
-                if docstring:
-                    docstring = f'\n{docstring}\n'
-        return docstring
-
-    @classmethod
-    def _new_section(
-        cls,
-        markdown: str,
-        before: str,
-        start_header: str,
-        before_name: str,
-        name: str,
-        after_name: str,
-        parent_name_space_path: str
-    ) -> 'ReadMe':
-        section: cls = cls(markdown=markdown)
-        section.before = before
-        section.header = (
-            start_header +
-            before_name + name +
-            after_name + (
-                ''
-                if after_name.endswith('\n') else
-                '\n'
-            )
-        )
-        # Assign a name-space path to the section
-        if parent_name_space_path and get_name_space(parent_name_space_path):
-            concatenated_name_space_path: str = (
-                f'{parent_name_space_path}.{name}'
-                if name else
-                parent_name_space_path
-            )
-            section.name_space_path = concatenated_name_space_path
-        else:
-            section.name_space_path = name
-        return section
-
-    def __iter__(self) -> Iterable['ReadMe']:
-        """
-        Yield an iterable collection of `ReadMe` instances representing
-        sub-sections of this document or document-section.
-        """
-        # Only include the first "before" if it's not being replaced by a
-        # docstring
-        include_before: bool = False if self.text else True
-        before: str
-        start_header: str
-        before_name: str
-        name: str
-        after_name: str
-        body: str
-        for (
-            before,
-            start_header,
-            before_name,
-            name,
-            after_name,
-            body
-        ) in self._split():
-            yield self._new_section(
-                markdown=body,
-                before=before if include_before else '\n',
-                start_header=start_header,
-                before_name=before_name,
-                name=name,
-                after_name=after_name,
-                parent_name_space_path=self.name_space_path
-            )
-            # Only exclude before for the first section
-            include_before = True
-
-    def _split(self) -> List[str]:
-        """
-        Split the markdown into sections
-        """
-        return MARKDOWN_SECTIONS_PATTERN.findall(
-            self.markdown
-        )
 
     def __str__(self) -> str:
         """
         Render the document as markdown, updated to reflect any docstrings
         that were found
         """
-        body: str = ''.join(
-            str(section)
-            for section in self
-        )
-        text: str = self.text
-        if not (body or text):
-            body = self.markdown
-        return (
-            f'{self.before}'
-            f'{self.header}'
-            f'{text}'
-            f'{body}'
-        )
+        return str(Section(self.markdown.split('\n')))
 
 
 def update(path: str = './README.md') -> None:
     """
-    Update an existing README.md file located at `path`.
+    Update an existing markdown-formatted README file based on any headers
+    matching (fully-qualified) module, class, or function docstrings.
 
     ```python
     import readme_md_docstrings
     readme_md_docstrings.update('./README.md')
-    ```
-
-    This can also be run from the command line:
-    ```shell script
-    python3 -m readme_md_docstrings ./README.md
-    ```
-
-    If no path is provided, the default is "./README.md":
-    ```shell script
-    python3 -m readme_md_docstrings
     ```
     """
     # Read the existing markdown
