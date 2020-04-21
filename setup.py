@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='readme-md-docstrings',
-    version="0.0.13",
+    version="0.0.14",
     description=(
         'Update README.md from Docstrings'
     ),
@@ -28,5 +28,5 @@ setup(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent"
-    ],
+    ]
 )

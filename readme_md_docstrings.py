@@ -185,8 +185,9 @@ class Section:
                 str(section)
                 for section in self.sub_sections
             )
+        text: str
         if docstring:
-            return (
+            text = (
                 f'{self.lines[0].strip()}\n\n'
                 f'{docstring}\n'
             ) + (
@@ -195,13 +196,14 @@ class Section:
                 sub_sections_text
             )
         else:
-            return '\n'.join(
+            text = '\n'.join(
                 self.lines + (
                     [sub_sections_text]
                     if sub_sections_text else
                     []
                 )
             )
+        return text
 
 
 class ReadMe:
