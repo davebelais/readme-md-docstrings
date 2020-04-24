@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='readme-md-docstrings',
-    version="0.0.14",
+    version="0.1.0",
     description=(
         'Update README.md from Docstrings'
     ),

@@ -66,8 +66,13 @@ def _get_header_level(header: str) -> int:
     return header_level
 
 
-def _get_header_name(header: str) -> str:
-    return header.lstrip('#').strip()
+def _get_header_name(header: str) -> Optional[str]:
+    header = header.lstrip()
+    return (
+        header.lstrip('#').strip()
+        if header.startswith('#') else
+        None
+    )
 
 
 def _get_sub_section_ranges(
@@ -108,7 +113,6 @@ def _get_sub_section_ranges(
                     line_header_level == 0 or
                     line_header_level > header_level
                 )
-    # if start != index:
     sub_section_ranges.append((start, index + 1))
     return sub_section_ranges
 
@@ -121,7 +125,7 @@ class Section:
         parent_object_path: str = ''
     ) -> None:
         self.documented_object: Optional[object] = None
-        self.name_space_path: str = parent_object_path
+        self.parent_object_path: str = parent_object_path
         self.name: str = ''
         self.header_level: int = 0
         self.lines: List[str] = []
@@ -133,15 +137,16 @@ class Section:
         self.name = _get_header_name(header)
         name_space_path: Optional[str]
         for name_space_path in (
-            [f'{self.name_space_path}.{self.name}']
-            if self.name_space_path else []
-        ) + [
-            self.name,
-            None
-        ]:
-            if name_space_path is not None:
+            [f'{self.parent_object_path}.{self.name}']
+            if self.parent_object_path else []
+        ) + [self.name] + (
+            [None]
+            if self.name else
+            []
+        ):
+            if name_space_path:
                 self.documented_object = _get_object_from_path(name_space_path)
-            self.name_space_path = name_space_path
+            self.parent_object_path = name_space_path
             if self.documented_object is not None:
                 break
 
@@ -163,7 +168,7 @@ class Section:
                 self.sub_sections.append(
                     Section(
                         lines[start: end],
-                        parent_object_path=self.name_space_path
+                        parent_object_path=self.parent_object_path
                     )
                 )
             else:
@@ -241,7 +246,15 @@ class ReadMe:
         Render the document as markdown, updated to reflect any docstrings
         that were found
         """
-        return str(Section(self.markdown.split('\n')))
+        return str(
+            Section(
+                # Adding an empty line at the beginning makes certain that the
+                # top-level section has a header level 0—in order to
+                # accommodate multiple level-1 headers
+                [''] +
+                self.markdown.split('\n')
+            )
+        )[1:]
 
 
 def update(path: str = './README.md') -> None:
